@@ -1,0 +1,19 @@
+# Binaries
+cryptex
+*.exe
+
+# Go
+*.test
+*.out
+vendor/
+
+# Environment
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
