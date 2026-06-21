@@ -62,10 +62,23 @@ func New(tradingPair string) *OrderBook {
 
 // Add inserts a limit order into the order book.
 // Returns an error if the order already exists or is invalid.
+// Acquires the write lock — do not call while already holding it
+// (use AddLocked from within matching engine code instead).
 func (ob *OrderBook) Add(order *models.Order) error {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
+	return ob.addLocked(order)
+}
 
+// AddLocked inserts a limit order into the book WITHOUT acquiring the
+// lock. Callers must already hold the write lock (e.g. via Lock()).
+// This is used by the matching engine, which locks once for the whole
+// Submit() operation rather than locking per sub-step.
+func (ob *OrderBook) AddLocked(order *models.Order) error {
+	return ob.addLocked(order)
+}
+
+func (ob *OrderBook) addLocked(order *models.Order) error {
 	if _, exists := ob.orders[order.ID]; exists {
 		return fmt.Errorf("order %s already exists", order.ID)
 	}
