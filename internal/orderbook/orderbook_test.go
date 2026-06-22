@@ -26,6 +26,13 @@ func newOrder(side models.Side, price, qty float64) *models.Order {
 	}
 }
 
+func addOrder(t *testing.T, ob *orderbook.OrderBook, order *models.Order) {
+	t.Helper()
+	if err := ob.Add(order); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 func TestNewOrderBook(t *testing.T) {
@@ -69,9 +76,9 @@ func TestBidsOrderedDescending(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
 
 	// Add bids out of order
-	ob.Add(newOrder(models.SideBuy, 49000.0, 1.0))
-	ob.Add(newOrder(models.SideBuy, 51000.0, 1.0))
-	ob.Add(newOrder(models.SideBuy, 50000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 49000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 51000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 50000.0, 1.0))
 
 	// Best bid should be 51000 (highest)
 	if ob.BestBid() != 51000.0 {
@@ -83,9 +90,9 @@ func TestAsksOrderedAscending(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
 
 	// Add asks out of order
-	ob.Add(newOrder(models.SideSell, 53000.0, 1.0))
-	ob.Add(newOrder(models.SideSell, 51000.0, 1.0))
-	ob.Add(newOrder(models.SideSell, 52000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideSell, 53000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideSell, 51000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideSell, 52000.0, 1.0))
 
 	// Best ask should be 51000 (lowest)
 	if ob.BestAsk() != 51000.0 {
@@ -95,8 +102,8 @@ func TestAsksOrderedAscending(t *testing.T) {
 
 func TestSpread(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
-	ob.Add(newOrder(models.SideBuy, 50000.0, 1.0))
-	ob.Add(newOrder(models.SideSell, 51000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 50000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideSell, 51000.0, 1.0))
 
 	spread := ob.Spread()
 	if spread != 1000.0 {
@@ -107,7 +114,7 @@ func TestSpread(t *testing.T) {
 func TestCancelOrder(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
 	order := newOrder(models.SideBuy, 50000.0, 1.0)
-	ob.Add(order)
+	addOrder(t, ob, order)
 
 	cancelled, err := ob.Cancel(order.ID)
 	if err != nil {
@@ -133,7 +140,7 @@ func TestCancelNonExistentOrder(t *testing.T) {
 func TestDuplicateOrder(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
 	order := newOrder(models.SideBuy, 50000.0, 1.0)
-	ob.Add(order)
+	addOrder(t, ob, order)
 
 	err := ob.Add(order)
 	if err == nil {
@@ -151,9 +158,9 @@ func TestInvalidPrice(t *testing.T) {
 
 func TestSnapshot(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
-	ob.Add(newOrder(models.SideBuy, 50000.0, 2.0))
-	ob.Add(newOrder(models.SideBuy, 49000.0, 1.0))
-	ob.Add(newOrder(models.SideSell, 51000.0, 1.5))
+	addOrder(t, ob, newOrder(models.SideBuy, 50000.0, 2.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 49000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideSell, 51000.0, 1.5))
 
 	snap := ob.Snapshot(10)
 	if snap.TradingPair != "BTC-USD" {
@@ -173,9 +180,9 @@ func TestSnapshot(t *testing.T) {
 
 func TestMultipleOrdersSamePrice(t *testing.T) {
 	ob := orderbook.New("BTC-USD")
-	ob.Add(newOrder(models.SideBuy, 50000.0, 1.0))
-	ob.Add(newOrder(models.SideBuy, 50000.0, 2.0))
-	ob.Add(newOrder(models.SideBuy, 50000.0, 0.5))
+	addOrder(t, ob, newOrder(models.SideBuy, 50000.0, 1.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 50000.0, 2.0))
+	addOrder(t, ob, newOrder(models.SideBuy, 50000.0, 0.5))
 
 	snap := ob.Snapshot(10)
 	if len(snap.Bids) != 1 {
