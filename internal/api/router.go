@@ -2,7 +2,9 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -21,11 +23,21 @@ const defaultDepth = 10
 type Server struct {
 	book   *orderbook.OrderBook
 	engine *matching.Engine
+	store  OrderBookStore
+}
+
+// OrderBookStore persists resting orders after book mutations.
+type OrderBookStore interface {
+	Save(ctx context.Context, orders []*models.Order) error
 }
 
 // NewServer creates an API server backed by the given book and engine.
-func NewServer(book *orderbook.OrderBook, engine *matching.Engine) *Server {
-	return &Server{book: book, engine: engine}
+func NewServer(book *orderbook.OrderBook, engine *matching.Engine, stores ...OrderBookStore) *Server {
+	var store OrderBookStore
+	if len(stores) > 0 {
+		store = stores[0]
+	}
+	return &Server{book: book, engine: engine, store: store}
 }
 
 // Router returns a configured Gin engine.
@@ -85,6 +97,10 @@ func (s *Server) placeOrder(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := s.persist(c.Request.Context()); err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
 	c.JSON(http.StatusCreated, result)
 }
 
@@ -98,6 +114,10 @@ func (s *Server) cancelOrder(c *gin.Context) {
 	order, err := s.book.Cancel(orderID)
 	if err != nil {
 		respondError(c, http.StatusNotFound, err.Error())
+		return
+	}
+	if err := s.persist(c.Request.Context()); err != nil {
+		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	c.JSON(http.StatusOK, order)
@@ -154,4 +174,14 @@ func parseDepth(raw string) (int, error) {
 
 func respondError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"error": message})
+}
+
+func (s *Server) persist(ctx context.Context) error {
+	if s.store == nil {
+		return nil
+	}
+	if err := s.store.Save(ctx, s.book.RestingOrders()); err != nil {
+		return fmt.Errorf("persist order book: %w", err)
+	}
+	return nil
 }

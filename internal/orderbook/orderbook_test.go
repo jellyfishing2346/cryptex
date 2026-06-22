@@ -195,3 +195,33 @@ func TestMultipleOrdersSamePrice(t *testing.T) {
 		t.Fatalf("expected 3 orders, got %d", snap.Bids[0].Orders)
 	}
 }
+
+func TestRestingOrders(t *testing.T) {
+	ob := orderbook.New("BTC-USD")
+	buy := newOrder(models.SideBuy, 50000.0, 1.0)
+	sell := newOrder(models.SideSell, 51000.0, 2.0)
+	cancelled := newOrder(models.SideBuy, 49000.0, 1.0)
+
+	addOrder(t, ob, buy)
+	addOrder(t, ob, sell)
+	addOrder(t, ob, cancelled)
+	if _, err := ob.Cancel(cancelled.ID); err != nil {
+		t.Fatalf("unexpected cancel error: %v", err)
+	}
+
+	orders := ob.RestingOrders()
+	if len(orders) != 2 {
+		t.Fatalf("expected 2 resting orders, got %d", len(orders))
+	}
+	if orders[0].ID != buy.ID {
+		t.Fatalf("expected first resting order %s, got %s", buy.ID, orders[0].ID)
+	}
+	if orders[1].ID != sell.ID {
+		t.Fatalf("expected second resting order %s, got %s", sell.ID, orders[1].ID)
+	}
+
+	orders[0].Status = models.OrderStatusCancelled
+	if stored, ok := ob.GetOrder(buy.ID); !ok || stored.Status != models.OrderStatusOpen {
+		t.Fatal("resting orders should not expose mutable book state")
+	}
+}

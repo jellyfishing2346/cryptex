@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,24 @@ func newTestRouter() *gin.Engine {
 	book := orderbook.New("BTC-USD")
 	engine := matching.New(book)
 	return api.NewServer(book, engine).Router()
+}
+
+func newTestRouterWithStore(store *recordingStore) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	book := orderbook.New("BTC-USD")
+	engine := matching.New(book)
+	return api.NewServer(book, engine, store).Router()
+}
+
+type recordingStore struct {
+	calls  int
+	orders []*models.Order
+}
+
+func (s *recordingStore) Save(_ context.Context, orders []*models.Order) error {
+	s.calls++
+	s.orders = orders
+	return nil
 }
 
 func doJSON(t *testing.T, router http.Handler, method, path string, body any) *httptest.ResponseRecorder {
@@ -129,6 +148,34 @@ func TestCancelOrder(t *testing.T) {
 	cancelled := decodeJSON[models.Order](t, cancelRec)
 	if cancelled.Status != models.OrderStatusCancelled {
 		t.Fatalf("expected cancelled order, got %s", cancelled.Status)
+	}
+}
+
+func TestPersistsAfterOrderMutations(t *testing.T) {
+	store := &recordingStore{}
+	router := newTestRouterWithStore(store)
+
+	createRec := doJSON(t, router, http.MethodPost, "/orders", limitOrder(models.SideBuy, 50000, 1))
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("expected create status %d, got %d: %s", http.StatusCreated, createRec.Code, createRec.Body.String())
+	}
+	if store.calls != 1 {
+		t.Fatalf("expected one persistence call after create, got %d", store.calls)
+	}
+	if len(store.orders) != 1 {
+		t.Fatalf("expected one persisted resting order, got %d", len(store.orders))
+	}
+
+	result := decodeJSON[matching.Result](t, createRec)
+	cancelRec := doJSON(t, router, http.MethodDelete, "/orders/"+result.Order.ID.String(), nil)
+	if cancelRec.Code != http.StatusOK {
+		t.Fatalf("expected cancel status %d, got %d: %s", http.StatusOK, cancelRec.Code, cancelRec.Body.String())
+	}
+	if store.calls != 2 {
+		t.Fatalf("expected two persistence calls after cancel, got %d", store.calls)
+	}
+	if len(store.orders) != 0 {
+		t.Fatalf("expected empty persisted book after cancel, got %d orders", len(store.orders))
 	}
 }
 
