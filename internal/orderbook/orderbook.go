@@ -210,6 +210,30 @@ func (ob *OrderBook) GetOrder(orderID uuid.UUID) (*models.Order, bool) {
 	return order, ok
 }
 
+// RestingOrders returns all orders currently resting in the book.
+// Orders are returned in book priority order: bids first, then asks.
+func (ob *OrderBook) RestingOrders() []*models.Order {
+	ob.mu.RLock()
+	defer ob.mu.RUnlock()
+
+	orders := make([]*models.Order, 0, len(ob.orders))
+	for _, level := range ob.bids {
+		for _, order := range level.Orders {
+			if order.Remaining() > 0 && order.Status != models.OrderStatusCancelled {
+				orders = append(orders, cloneOrder(order))
+			}
+		}
+	}
+	for _, level := range ob.asks {
+		for _, order := range level.Orders {
+			if order.Remaining() > 0 && order.Status != models.OrderStatusCancelled {
+				orders = append(orders, cloneOrder(order))
+			}
+		}
+	}
+	return orders
+}
+
 // BidsForMatching returns bid price levels for the matching engine.
 // Caller must hold the write lock.
 func (ob *OrderBook) BidsForMatching() []*PriceLevel {
@@ -312,4 +336,9 @@ func filterEmptyLevels(levels []*PriceLevel) []*PriceLevel {
 		}
 	}
 	return result
+}
+
+func cloneOrder(order *models.Order) *models.Order {
+	clone := *order
+	return &clone
 }
