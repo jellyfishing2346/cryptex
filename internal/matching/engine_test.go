@@ -41,6 +41,15 @@ func newMarketOrder(side models.Side, qty float64) *models.Order {
 	}
 }
 
+func submitOrder(t *testing.T, engine *matching.Engine, order *models.Order) *matching.Result {
+	t.Helper()
+	result, err := engine.Submit(order)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return result
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 func TestNoMatchEmptyBook(t *testing.T) {
@@ -48,10 +57,7 @@ func TestNoMatchEmptyBook(t *testing.T) {
 	engine := matching.New(book)
 
 	order := newLimitOrder(models.SideBuy, 50000.0, 1.0)
-	result, err := engine.Submit(order)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, order)
 	if len(result.Trades) != 0 {
 		t.Fatalf("expected no trades, got %d", len(result.Trades))
 	}
@@ -66,14 +72,11 @@ func TestFullMatch(t *testing.T) {
 
 	// Resting sell order
 	sell := newLimitOrder(models.SideSell, 50000.0, 1.0)
-	engine.Submit(sell)
+	submitOrder(t, engine, sell)
 
 	// Incoming buy that crosses
 	buy := newLimitOrder(models.SideBuy, 50000.0, 1.0)
-	result, err := engine.Submit(buy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, buy)
 
 	if len(result.Trades) != 1 {
 		t.Fatalf("expected 1 trade, got %d", len(result.Trades))
@@ -101,14 +104,11 @@ func TestPartialMatch(t *testing.T) {
 
 	// Resting sell: 2.0 BTC
 	sell := newLimitOrder(models.SideSell, 50000.0, 2.0)
-	engine.Submit(sell)
+	submitOrder(t, engine, sell)
 
 	// Incoming buy: only 0.5 BTC
 	buy := newLimitOrder(models.SideBuy, 50000.0, 0.5)
-	result, err := engine.Submit(buy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, buy)
 
 	if len(result.Trades) != 1 {
 		t.Fatalf("expected 1 trade, got %d", len(result.Trades))
@@ -132,14 +132,11 @@ func TestIncomingOrderPartiallyFilledThenBooked(t *testing.T) {
 
 	// Resting sell: only 0.5 BTC available
 	sell := newLimitOrder(models.SideSell, 50000.0, 0.5)
-	engine.Submit(sell)
+	submitOrder(t, engine, sell)
 
 	// Incoming buy wants 2.0 BTC — only 0.5 can fill
 	buy := newLimitOrder(models.SideBuy, 50000.0, 2.0)
-	result, err := engine.Submit(buy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, buy)
 
 	if len(result.Trades) != 1 {
 		t.Fatalf("expected 1 trade, got %d", len(result.Trades))
@@ -163,14 +160,11 @@ func TestNoMatchWhenPricesDontCross(t *testing.T) {
 
 	// Resting sell at 51000
 	sell := newLimitOrder(models.SideSell, 51000.0, 1.0)
-	engine.Submit(sell)
+	submitOrder(t, engine, sell)
 
 	// Incoming buy at 50000 — doesn't cross
 	buy := newLimitOrder(models.SideBuy, 50000.0, 1.0)
-	result, err := engine.Submit(buy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, buy)
 
 	if len(result.Trades) != 0 {
 		t.Fatalf("expected no trades, got %d", len(result.Trades))
@@ -190,13 +184,13 @@ func TestFIFOPriceTimePriority(t *testing.T) {
 
 	// Two resting sells at the same price, added in order
 	sell1 := newLimitOrder(models.SideSell, 50000.0, 1.0)
-	engine.Submit(sell1)
+	submitOrder(t, engine, sell1)
 	sell2 := newLimitOrder(models.SideSell, 50000.0, 1.0)
-	engine.Submit(sell2)
+	submitOrder(t, engine, sell2)
 
 	// Incoming buy for 1.0 should match sell1 first (FIFO)
 	buy := newLimitOrder(models.SideBuy, 50000.0, 1.0)
-	result, _ := engine.Submit(buy)
+	result := submitOrder(t, engine, buy)
 
 	if len(result.Trades) != 1 {
 		t.Fatalf("expected 1 trade, got %d", len(result.Trades))
@@ -212,11 +206,11 @@ func TestTradePriceIsRestingOrderPrice(t *testing.T) {
 
 	// Resting sell at 49000 (better than buyer's limit)
 	sell := newLimitOrder(models.SideSell, 49000.0, 1.0)
-	engine.Submit(sell)
+	submitOrder(t, engine, sell)
 
 	// Incoming buy willing to pay up to 50000
 	buy := newLimitOrder(models.SideBuy, 50000.0, 1.0)
-	result, _ := engine.Submit(buy)
+	result := submitOrder(t, engine, buy)
 
 	// Trade should execute at the resting price (49000), not 50000
 	if result.Trades[0].Price != 49000.0 {
@@ -229,13 +223,10 @@ func TestMarketOrderMatchesAnyPrice(t *testing.T) {
 	engine := matching.New(book)
 
 	sell := newLimitOrder(models.SideSell, 52000.0, 1.0)
-	engine.Submit(sell)
+	submitOrder(t, engine, sell)
 
 	marketBuy := newMarketOrder(models.SideBuy, 1.0)
-	result, err := engine.Submit(marketBuy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, marketBuy)
 	if len(result.Trades) != 1 {
 		t.Fatalf("expected 1 trade, got %d", len(result.Trades))
 	}
@@ -250,10 +241,7 @@ func TestMarketOrderNotBookedIfUnfilled(t *testing.T) {
 
 	// No resting liquidity at all
 	marketBuy := newMarketOrder(models.SideBuy, 1.0)
-	result, err := engine.Submit(marketBuy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, marketBuy)
 	if len(result.Trades) != 0 {
 		t.Fatalf("expected no trades, got %d", len(result.Trades))
 	}
@@ -268,16 +256,13 @@ func TestMultiLevelSweep(t *testing.T) {
 	engine := matching.New(book)
 
 	// Three sell levels
-	engine.Submit(newLimitOrder(models.SideSell, 50000.0, 1.0))
-	engine.Submit(newLimitOrder(models.SideSell, 50500.0, 1.0))
-	engine.Submit(newLimitOrder(models.SideSell, 51000.0, 1.0))
+	submitOrder(t, engine, newLimitOrder(models.SideSell, 50000.0, 1.0))
+	submitOrder(t, engine, newLimitOrder(models.SideSell, 50500.0, 1.0))
+	submitOrder(t, engine, newLimitOrder(models.SideSell, 51000.0, 1.0))
 
 	// Large buy that sweeps through all three levels
 	buy := newLimitOrder(models.SideBuy, 51000.0, 3.0)
-	result, err := engine.Submit(buy)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := submitOrder(t, engine, buy)
 
 	if len(result.Trades) != 3 {
 		t.Fatalf("expected 3 trades sweeping all levels, got %d", len(result.Trades))
