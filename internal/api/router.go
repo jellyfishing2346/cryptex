@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellyfishing2346/cryptex/internal/matching"
 	"github.com/jellyfishing2346/cryptex/internal/models"
+	"github.com/jellyfishing2346/cryptex/internal/nats"
 	"github.com/jellyfishing2346/cryptex/internal/orderbook"
 )
 
@@ -21,9 +23,10 @@ const defaultDepth = 10
 
 // Server owns the HTTP handlers for a single trading pair.
 type Server struct {
-	book   *orderbook.OrderBook
-	engine *matching.Engine
-	store  OrderBookStore
+	book      *orderbook.OrderBook
+	engine    *matching.Engine
+	store     OrderBookStore
+	publisher *nats.Publisher
 }
 
 // OrderBookStore persists resting orders after book mutations.
@@ -32,12 +35,12 @@ type OrderBookStore interface {
 }
 
 // NewServer creates an API server backed by the given book and engine.
-func NewServer(book *orderbook.OrderBook, engine *matching.Engine, stores ...OrderBookStore) *Server {
+func NewServer(book *orderbook.OrderBook, engine *matching.Engine, publisher *nats.Publisher, stores ...OrderBookStore) *Server {
 	var store OrderBookStore
 	if len(stores) > 0 {
 		store = stores[0]
 	}
-	return &Server{book: book, engine: engine, store: store}
+	return &Server{book: book, engine: engine, store: store, publisher: publisher}
 }
 
 // Router returns a configured Gin engine.
@@ -101,6 +104,25 @@ func (s *Server) placeOrder(c *gin.Context) {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Publish trades to NATS if publisher is configured
+	if s.publisher != nil && len(result.Trades) > 0 {
+		for _, trade := range result.Trades {
+			if err := s.publisher.PublishTrade(trade); err != nil {
+				log.Printf("failed to publish trade to NATS: %v", err)
+			}
+			// Also publish as a structured event
+			event := &nats.TradeEvent{
+				Trade:     trade,
+				Timestamp: time.Now().UTC(),
+				EventType: "trade.executed",
+			}
+			if err := s.publisher.PublishTradeEvent(event); err != nil {
+				log.Printf("failed to publish trade event to NATS: %v", err)
+			}
+		}
+	}
+
 	c.JSON(http.StatusCreated, result)
 }
 

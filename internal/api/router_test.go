@@ -20,14 +20,14 @@ func newTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	book := orderbook.New("BTC-USD")
 	engine := matching.New(book)
-	return api.NewServer(book, engine).Router()
+	return api.NewServer(book, engine, nil).Router()
 }
 
 func newTestRouterWithStore(store *recordingStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	book := orderbook.New("BTC-USD")
 	engine := matching.New(book)
-	return api.NewServer(book, engine, store).Router()
+	return api.NewServer(book, engine, nil, store).Router()
 }
 
 type recordingStore struct {

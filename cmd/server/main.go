@@ -11,6 +11,7 @@ import (
 	"github.com/jellyfishing2346/cryptex/internal/api"
 	"github.com/jellyfishing2346/cryptex/internal/matching"
 	"github.com/jellyfishing2346/cryptex/internal/models"
+	"github.com/jellyfishing2346/cryptex/internal/nats"
 	"github.com/jellyfishing2346/cryptex/internal/orderbook"
 	"github.com/jellyfishing2346/cryptex/internal/persistence"
 	"github.com/redis/go-redis/v9"
@@ -48,7 +49,23 @@ func main() {
 	log.Printf("loaded %d resting orders for %s", len(orders), tradingPair)
 
 	engine := matching.New(book)
-	router := api.NewServer(book, engine, store).Router()
+
+	// Initialize NATS publisher if NATS_URL is configured
+	var publisher *nats.Publisher
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL != "" {
+		var err error
+		publisher, err = nats.New(natsURL)
+		if err != nil {
+			log.Fatalf("connect to nats: %v", err)
+		}
+		defer publisher.Close()
+		log.Printf("NATS publisher initialized for %s", natsURL)
+	} else {
+		log.Println("NATS_URL not set, trade event streaming disabled")
+	}
+
+	router := api.NewServer(book, engine, publisher, store).Router()
 
 	addr := ":" + port()
 	log.Printf("starting Cryptex API on %s", addr)
