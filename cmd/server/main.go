@@ -59,7 +59,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("connect to nats: %v", err)
 		}
-		defer publisher.Close()
+		defer func() { _ = publisher.Close() }()
 		log.Printf("NATS publisher initialized for %s", natsURL)
 	} else {
 		log.Println("NATS_URL not set, trade event streaming disabled")

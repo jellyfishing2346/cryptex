@@ -28,7 +28,7 @@ func TestPublisher_PublishTrade(t *testing.T) {
 
 	publisher, err := New(nats.DefaultURL)
 	require.NoError(t, err)
-	defer publisher.Close()
+	defer func() { _ = publisher.Close() }()
 
 	// Subscribe to verify the message was published
 	sub, err := nc.Subscribe("trades.BTC-USD", func(msg *nats.Msg) {
@@ -38,7 +38,7 @@ func TestPublisher_PublishTrade(t *testing.T) {
 		assert.Equal(t, "BTC-USD", trade.TradingPair)
 	})
 	require.NoError(t, err)
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	// Create a test trade
 	trade := &models.Trade{
@@ -67,7 +67,7 @@ func TestPublisher_PublishOrder(t *testing.T) {
 
 	publisher, err := New(nats.DefaultURL)
 	require.NoError(t, err)
-	defer publisher.Close()
+	defer func() { _ = publisher.Close() }()
 
 	sub, err := nc.Subscribe("orders.BTC-USD", func(msg *nats.Msg) {
 		var order models.Order
@@ -76,7 +76,7 @@ func TestPublisher_PublishOrder(t *testing.T) {
 		assert.Equal(t, "BTC-USD", order.TradingPair)
 	})
 	require.NoError(t, err)
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	order := &models.Order{
 		TradingPair: "BTC-USD",
@@ -101,7 +101,7 @@ func TestPublisher_PublishTradeEvent(t *testing.T) {
 
 	publisher, err := New(nats.DefaultURL)
 	require.NoError(t, err)
-	defer publisher.Close()
+	defer func() { _ = publisher.Close() }()
 
 	sub, err := nc.Subscribe("trade-events.BTC-USD", func(msg *nats.Msg) {
 		var event TradeEvent
@@ -111,7 +111,7 @@ func TestPublisher_PublishTradeEvent(t *testing.T) {
 		assert.Equal(t, "BTC-USD", event.Trade.TradingPair)
 	})
 	require.NoError(t, err)
-	defer sub.Unsubscribe()
+	defer func() { _ = sub.Unsubscribe() }()
 
 	event := &TradeEvent{
 		Trade: &models.Trade{
