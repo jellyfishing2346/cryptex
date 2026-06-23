@@ -17,16 +17,20 @@ import (
 	"github.com/jellyfishing2346/cryptex/internal/models"
 	"github.com/jellyfishing2346/cryptex/internal/nats"
 	"github.com/jellyfishing2346/cryptex/internal/orderbook"
+	"github.com/jellyfishing2346/cryptex/internal/risk"
+	"github.com/jellyfishing2346/cryptex/internal/ws"
 )
 
 const defaultDepth = 10
 
 // Server owns the HTTP handlers for a single trading pair.
 type Server struct {
-	book      *orderbook.OrderBook
-	engine    *matching.Engine
-	store     OrderBookStore
-	publisher *nats.Publisher
+	book       *orderbook.OrderBook
+	engine     *matching.Engine
+	store      OrderBookStore
+	publisher  *nats.Publisher
+	riskConfig *risk.Config
+	hub        *ws.Hub
 }
 
 // OrderBookStore persists resting orders after book mutations.
@@ -40,7 +44,23 @@ func NewServer(book *orderbook.OrderBook, engine *matching.Engine, publisher *na
 	if len(stores) > 0 {
 		store = stores[0]
 	}
-	return &Server{book: book, engine: engine, store: store, publisher: publisher}
+	hub := ws.NewHub()
+	defaultConfig := risk.DefaultConfig()
+	return &Server{book: book, engine: engine, store: store, publisher: publisher, riskConfig: &defaultConfig, hub: hub}
+}
+
+// NewServerWithRisk creates an API server with risk management enabled.
+func NewServerWithRisk(book *orderbook.OrderBook, publisher *nats.Publisher, riskConfig *risk.Config, stores ...OrderBookStore) *Server {
+	var store OrderBookStore
+	if len(stores) > 0 {
+		store = stores[0]
+	}
+
+	checker := risk.NewWithConfig(riskConfig, book)
+	engine := matching.NewWithRiskChecks(book, checker)
+	hub := ws.NewHub()
+
+	return &Server{book: book, engine: engine, store: store, publisher: publisher, riskConfig: riskConfig, hub: hub}
 }
 
 // Router returns a configured Gin engine.
@@ -48,10 +68,18 @@ func (s *Server) Router() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
+	// API routes
 	router.GET("/healthz", s.health)
 	router.POST("/orders", s.placeOrder)
 	router.DELETE("/orders/:id", s.cancelOrder)
 	router.GET("/orderbook", s.snapshot)
+	router.GET("/ws", ws.Handler(s.hub))
+
+	// Serve static files for dashboard
+	router.Static("/assets", "./web/assets")
+	router.GET("/", func(c *gin.Context) {
+		c.File("./web/dashboard.html")
+	})
 
 	return router
 }
@@ -105,6 +133,9 @@ func (s *Server) placeOrder(c *gin.Context) {
 		return
 	}
 
+	// Broadcast order book update to WebSocket clients
+	s.hub.Broadcast(ws.EventTypeOrderBook, s.book.Snapshot(defaultDepth))
+
 	// Publish trades to NATS if publisher is configured
 	if s.publisher != nil && len(result.Trades) > 0 {
 		for _, trade := range result.Trades {
@@ -142,6 +173,10 @@ func (s *Server) cancelOrder(c *gin.Context) {
 		respondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	// Broadcast order book update to WebSocket clients
+	s.hub.Broadcast(ws.EventTypeOrderBook, s.book.Snapshot(defaultDepth))
+
 	c.JSON(http.StatusOK, order)
 }
 
