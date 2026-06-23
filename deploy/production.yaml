@@ -1,9 +1,36 @@
 ---
+# Production Kubernetes Deployment
+# This configuration is optimized for production environments
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cryptex-config
+  namespace: cryptex-prod
+data:
+  TRADING_PAIR: "BTC-USD"
+  REDIS_ADDR: "redis-service:6379"
+  REDIS_DB: "0"
+  NATS_URL: "nats://nats-service:4222"
+  MAX_POSITION_SIZE: "1000.0"
+  MIN_PRICE: "0.01"
+  MAX_PRICE: "1000000.0"
+  PORT: "8080"
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  GOMAXPROCS: "8"
+  GOGC: "50"
+  READ_TIMEOUT: "30"
+  WRITE_TIMEOUT: "30"
+---
 # Redis Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
+  namespace: cryptex-prod
 spec:
   replicas: 1
   selector:
@@ -13,24 +40,62 @@ spec:
     metadata:
       labels:
         app: redis
+        environment: production
     spec:
       containers:
       - name: redis
         image: redis:7-alpine
         ports:
         - containerPort: 6379
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+              optional: true
+        command:
+        - redis-server
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "256mb"
+        - --maxmemory-policy
+        - allkeys-lru
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
             memory: "256Mi"
             cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: cryptex-prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: redis-service
+  namespace: cryptex-prod
 spec:
   selector:
     app: redis
@@ -43,6 +108,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: nats
+  namespace: cryptex-prod
 spec:
   replicas: 1
   selector:
@@ -52,39 +118,67 @@ spec:
     metadata:
       labels:
         app: nats
+        environment: production
     spec:
       containers:
       - name: nats
         image: nats:2.10-alpine
         ports:
         - containerPort: 4222
-        args: ["-js"]
+        - containerPort: 8222
+        args: ["-js", "-m", "8222"]
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
             memory: "256Mi"
             cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        volumeMounts:
+        - name: nats-data
+          mountPath: /data
+      volumes:
+      - name: nats-data
+        persistentVolumeClaim:
+          claimName: nats-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nats-pvc
+  namespace: cryptex-prod
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: nats-service
+  namespace: cryptex-prod
 spec:
   selector:
     app: nats
   ports:
-  - port: 4222
+  - name: client
+    port: 4222
     targetPort: 4222
+  - name: monitoring
+    port: 8222
+    targetPort: 8222
 ---
 # Cryptex Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cryptex
+  namespace: cryptex-prod
   labels:
     app: cryptex
+    environment: production
 spec:
   replicas: 3
   selector:
@@ -94,64 +188,235 @@ spec:
     metadata:
       labels:
         app: cryptex
+        environment: production
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
       - name: cryptex
         image: cryptex:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
+          name: http
+        - containerPort: 9090
+          name: metrics
+        envFrom:
+        - configMapRef:
+            name: cryptex-config
         env:
-        - name: TRADING_PAIR
-          value: "BTC-USD"
-        - name: REDIS_ADDR
-          value: "redis-service:6379"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: redis-secret
               key: password
               optional: true
-        - name: REDIS_DB
-          value: "0"
-        - name: NATS_URL
-          value: "nats://nats-service:4222"
-        - name: MAX_POSITION_SIZE
-          value: "1000.0"
-        - name: MIN_PRICE
-          value: "0.01"
-        - name: MAX_PRICE
-          value: "1000000.0"
-        - name: PORT
-          value: "8080"
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
             memory: "512Mi"
             cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
         livenessProbe:
           httpGet:
             path: /healthz
             port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /healthz
             port: 8080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: cryptex-service
+  namespace: cryptex-prod
 spec:
   selector:
     app: cryptex
   ports:
-  - protocol: TCP
+  - name: http
+    protocol: TCP
     port: 80
     targetPort: 8080
+  - name: metrics
+    protocol: TCP
+    port: 9090
+    targetPort: 9090
   type: LoadBalancer
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cryptex-hpa
+  namespace: cryptex-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cryptex
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 2
+        periodSeconds: 15
+      selectPolicy: Max
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cryptex-pdb
+  namespace: cryptex-prod
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: cryptex
+---
+# Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cryptex-service-account
+  namespace: cryptex-prod
+---
+# Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cryptex-network-policy
+  namespace: cryptex-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: cryptex
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: cryptex-prod
+    ports:
+    - protocol: TCP
+      port: 8080
+    - protocol: TCP
+      port: 9090
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: nats
+    ports:
+    - protocol: TCP
+      port: 4222
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 53
+  - to:
+    - namespaceSelector: {}
+      ports:
+    - protocol: TCP
+      port: 443
+---
+# Resource Quota
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: cryptex-resource-quota
+  namespace: cryptex-prod
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: "4Gi"
+    limits.cpu: "8"
+    limits.memory: "8Gi"
+    persistentvolumeclaims: "10"
+---
+# Limit Range
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cryptex-limit-range
+  namespace: cryptex-prod
+spec:
+  limits:
+  - default:
+      cpu: "1000m"
+      memory: "1Gi"
+    defaultRequest:
+      cpu: "500m"
+      memory: "512Mi"
+    type: Container
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cryptex-prod
+  labels:
+    environment: production
+    name: cryptex-prod

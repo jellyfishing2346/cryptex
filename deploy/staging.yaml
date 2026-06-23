@@ -1,0 +1,283 @@
+---
+# Staging Kubernetes Deployment
+# This configuration is optimized for staging environments
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: cryptex-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        environment: staging
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: cryptex-staging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: cryptex-staging
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+---
+# NATS Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: cryptex-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+        environment: staging
+    spec:
+      containers:
+      - name: nats
+        image: nats:2.10-alpine
+        ports:
+        - containerPort: 4222
+        - containerPort: 8222
+        args: ["-js"]
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        volumeMounts:
+        - name: nats-data
+          mountPath: /data
+      volumes:
+      - name: nats-data
+        persistentVolumeClaim:
+          claimName: nats-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nats-pvc
+  namespace: cryptex-staging
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats-service
+  namespace: cryptex-staging
+spec:
+  selector:
+    app: nats
+  ports:
+  - name: client
+    port: 4222
+    targetPort: 4222
+  - name: monitoring
+    port: 8222
+    targetPort: 8222
+---
+# Cryptex Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cryptex
+  namespace: cryptex-staging
+  labels:
+    app: cryptex
+    environment: staging
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cryptex
+  template:
+    metadata:
+      labels:
+        app: cryptex
+        environment: staging
+    spec:
+      containers:
+      - name: cryptex
+        image: cryptex:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 9090
+        env:
+        - name: TRADING_PAIR
+          value: "BTC-USD"
+        - name: REDIS_ADDR
+          value: "redis-service:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: password
+              optional: true
+        - name: REDIS_DB
+          value: "0"
+        - name: NATS_URL
+          value: "nats://nats-service:4222"
+        - name: MAX_POSITION_SIZE
+          value: "1000.0"
+        - name: MIN_PRICE
+          value: "0.01"
+        - name: MAX_PRICE
+          value: "1000000.0"
+        - name: PORT
+          value: "8080"
+        - name: ENABLE_METRICS
+          value: "true"
+        - name: METRICS_PORT
+          value: "9090"
+        - name: GOMAXPROCS
+          value: "4"
+        - name: GOGC
+          value: "50"
+        - name: READ_TIMEOUT
+          value: "30"
+        - name: WRITE_TIMEOUT
+          value: "30"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cryptex-service
+  namespace: cryptex-staging
+spec:
+  selector:
+    app: cryptex
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    protocol: TCP
+    port: 9090
+    targetPort: 9090
+  type: LoadBalancer
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cryptex-hpa
+  namespace: cryptex-staging
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cryptex
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cryptex-pdb
+  namespace: cryptex-staging
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cryptex
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cryptex-staging
+  labels:
+    environment: staging
