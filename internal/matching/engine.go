@@ -12,16 +12,23 @@ import (
 	"github.com/google/uuid"
 	"github.com/jellyfishing2346/cryptex/internal/models"
 	"github.com/jellyfishing2346/cryptex/internal/orderbook"
+	"github.com/jellyfishing2346/cryptex/internal/risk"
 )
 
 // Engine matches incoming orders against the resting orders in an OrderBook.
 type Engine struct {
-	book *orderbook.OrderBook
+	book   *orderbook.OrderBook
+	checker *risk.Checker
 }
 
 // New creates a matching engine for the given order book.
 func New(book *orderbook.OrderBook) *Engine {
 	return &Engine{book: book}
+}
+
+// NewWithRiskChecks creates a matching engine with risk management checks.
+func NewWithRiskChecks(book *orderbook.OrderBook, checker *risk.Checker) *Engine {
+	return &Engine{book: book, checker: checker}
 }
 
 // Result holds the outcome of submitting an order: the order itself
@@ -35,6 +42,13 @@ type Result struct {
 // resting book, then adds any unfilled remainder to the book (limit
 // orders only — market orders that can't fully fill are not booked).
 func (e *Engine) Submit(order *models.Order) (*Result, error) {
+	// Perform risk checks before locking the book
+	if e.checker != nil {
+		if err := e.checker.CheckOrder(order); err != nil {
+			return nil, err
+		}
+	}
+
 	e.book.Lock()
 	defer e.book.Unlock()
 

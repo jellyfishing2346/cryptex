@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/jellyfishing2346/cryptex/internal/api"
-	"github.com/jellyfishing2346/cryptex/internal/matching"
 	"github.com/jellyfishing2346/cryptex/internal/models"
 	"github.com/jellyfishing2346/cryptex/internal/nats"
 	"github.com/jellyfishing2346/cryptex/internal/orderbook"
 	"github.com/jellyfishing2346/cryptex/internal/persistence"
+	"github.com/jellyfishing2346/cryptex/internal/risk"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -48,7 +48,12 @@ func main() {
 	}
 	log.Printf("loaded %d resting orders for %s", len(orders), tradingPair)
 
-	engine := matching.New(book)
+	// Configure risk management
+	riskConfig := &risk.Config{
+		MaxPositionSize: maxPositionSize(),
+		MinPrice:        minPrice(),
+		MaxPrice:        maxPrice(),
+	}
 
 	// Initialize NATS publisher if NATS_URL is configured
 	var publisher *nats.Publisher
@@ -65,7 +70,8 @@ func main() {
 		log.Println("NATS_URL not set, trade event streaming disabled")
 	}
 
-	router := api.NewServer(book, engine, publisher, store).Router()
+	// Create server with risk management enabled
+	router := api.NewServerWithRisk(book, publisher, riskConfig, store).Router()
 
 	addr := ":" + port()
 	log.Printf("starting Cryptex API on %s", addr)
@@ -98,6 +104,42 @@ func redisDB() int {
 		log.Fatalf("invalid REDIS_DB: %v", err)
 	}
 	return db
+}
+
+func maxPositionSize() float64 {
+	raw := os.Getenv("MAX_POSITION_SIZE")
+	if raw == "" {
+		return 1000.0 // default
+	}
+	size, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		log.Fatalf("invalid MAX_POSITION_SIZE: %v", err)
+	}
+	return size
+}
+
+func minPrice() float64 {
+	raw := os.Getenv("MIN_PRICE")
+	if raw == "" {
+		return 0.01 // default
+	}
+	price, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		log.Fatalf("invalid MIN_PRICE: %v", err)
+	}
+	return price
+}
+
+func maxPrice() float64 {
+	raw := os.Getenv("MAX_PRICE")
+	if raw == "" {
+		return 1000000.0 // default
+	}
+	price, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		log.Fatalf("invalid MAX_PRICE: %v", err)
+	}
+	return price
 }
 
 func restoreOrders(book *orderbook.OrderBook, orders []*models.Order) error {

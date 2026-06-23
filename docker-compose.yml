@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"
+    command: "-js"
+
+  cryptex:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - TRADING_PAIR=BTC-USD
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - NATS_URL=nats://nats:4222
+      - MAX_POSITION_SIZE=1000.0
+      - MIN_PRICE=0.01
+      - MAX_PRICE=1000000.0
+      - PORT=8080
+    depends_on:
+      - redis
+      - nats
+    restart: unless-stopped
+
+volumes:
+  redis_data:

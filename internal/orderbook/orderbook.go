@@ -256,6 +256,46 @@ func (ob *OrderBook) Unlock() {
 	ob.mu.Unlock()
 }
 
+// RLock acquires the read lock. Used for read-only operations.
+func (ob *OrderBook) RLock() {
+	ob.mu.RLock()
+}
+
+// RUnlock releases the read lock.
+func (ob *OrderBook) RUnlock() {
+	ob.mu.RUnlock()
+}
+
+// GetBids returns a copy of bid levels for read-only operations.
+func (ob *OrderBook) GetBids() []*PriceLevel {
+	ob.mu.RLock()
+	defer ob.mu.RUnlock()
+
+	result := make([]*PriceLevel, len(ob.bids))
+	for i, level := range ob.bids {
+		result[i] = &PriceLevel{
+			Price:  level.Price,
+			Orders: append([]*models.Order{}, level.Orders...),
+		}
+	}
+	return result
+}
+
+// GetAsks returns a copy of ask levels for read-only operations.
+func (ob *OrderBook) GetAsks() []*PriceLevel {
+	ob.mu.RLock()
+	defer ob.mu.RUnlock()
+
+	result := make([]*PriceLevel, len(ob.asks))
+	for i, level := range ob.asks {
+		result[i] = &PriceLevel{
+			Price:  level.Price,
+			Orders: append([]*models.Order{}, level.Orders...),
+		}
+	}
+	return result
+}
+
 // CleanEmptyLevels removes price levels with no remaining orders.
 // Called by the matching engine after fills.
 func (ob *OrderBook) CleanEmptyLevels() {
