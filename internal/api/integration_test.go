@@ -60,7 +60,9 @@ func TestRiskChecksIntegration(t *testing.T) {
 				Quantity:    1.0,
 				UserID:      userID,
 			}
-			book.Add(order)
+			if err:= book.Add(order); err != nil {
+				t.Fatalf("failed to add order to book: %v", err)
+			}
 		}
 
 		reqBody := placeOrderRequest{
@@ -83,7 +85,9 @@ func TestRiskChecksIntegration(t *testing.T) {
 		}
 
 		var response map[string]string
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+    		t.Fatalf("failed to unmarshal response: %v", err)
+		}
 		if response["error"] == "" {
 			t.Error("expected error message in response")
 		}
@@ -145,7 +149,9 @@ func TestRiskChecksIntegration(t *testing.T) {
 			Quantity:    1.0,
 			UserID:      userID,
 		}
-		book.Add(sellOrder)
+		if err := book.Add(sellOrder); err != nil {
+    		t.Fatalf("failed to add sell order to book: %v", err)
+		}
 
 		// Try to place a buy order that would cross
 		reqBody := placeOrderRequest{
