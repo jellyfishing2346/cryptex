@@ -39,7 +39,7 @@ substitutions:
   _REPO: 'cryptex'
   _ZONE: 'us-central1-a'
   _CLUSTER_NAME: 'cryptex-cluster'
-  _PROJECT_ID: 'credit-risk-499502'
+  _PROJECT_ID: 'gen-lang-client-0709777468'
 
 # Timeout for the build
 timeout: '1200s'

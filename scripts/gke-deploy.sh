@@ -51,7 +51,7 @@ if ! kubectl get secret redis-secret -n "$NAMESPACE" &> /dev/null; then
 fi
 
 # Update the deployment file with the correct image
-sed "s|us-central1-docker.pkg.dev/credit-risk-499502/cryptex/cryptex:latest|$FULL_IMAGE_NAME|g" deploy/gke-production.yaml > /tmp/gke-production.yaml
+sed "s|us-central1-docker.pkg.dev/gen-lang-client-0709777468/cryptex/cryptex:latest|$FULL_IMAGE_NAME|g" deploy/gke-production.yaml > /tmp/gke-production.yaml
 
 # Remove ingress and managed certificate if you don't have a custom domain
 # Uncomment the following lines if you want to skip ingress setup
