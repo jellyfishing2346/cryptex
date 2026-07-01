@@ -1,0 +1,51 @@
+# Cloud Build configuration for Cryptex
+# This configuration builds the Docker image and deploys to GKE
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:$COMMIT_SHA', '.']
+
+  # Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:$COMMIT_SHA']
+
+  # Tag the image as latest
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['tag', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:$COMMIT_SHA', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:latest']
+
+  # Push the latest tag
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:latest']
+
+  # Deploy to GKE (optional - requires cluster and deployment configuration)
+  # Uncomment the following steps if you want to deploy automatically
+  # - name: 'gcr.io/cloud-builders/gke-deploy'
+  #   args:
+  #     - run
+  #     - --filename=deploy/gke-production.yaml
+  #     - --image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:$COMMIT_SHA
+  #     - --location=$_ZONE
+  #     - --cluster=$_CLUSTER_NAME
+
+# Store the image as a build artifact
+images:
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:$COMMIT_SHA'
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/cryptex:latest'
+
+# Substitution variables
+substitutions:
+  _REGION: 'us-central1'
+  _REPO: 'cryptex'
+  _ZONE: 'us-central1-a'
+  _CLUSTER_NAME: 'cryptex-cluster'
+  _PROJECT_ID: 'credit-risk-499502'
+
+# Timeout for the build
+timeout: '1200s'
+
+# Build options
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: 100
+  logging: GCS_ONLY
