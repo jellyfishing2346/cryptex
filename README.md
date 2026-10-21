@@ -5,7 +5,7 @@
 ### **High-Performance Cryptocurrency Exchange Matching Engine**
 
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)]()
 
 A blazing-fast, production-ready cryptocurrency exchange matching engine built in Go with real-time trade event streaming, persistent storage, and comprehensive risk management.
@@ -370,7 +370,7 @@ Contributions are welcome! Please read our development guide first.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 
