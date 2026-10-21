@@ -30,7 +30,7 @@ Cryptex is currently in development (version 0.8.x). While it has core functiona
 
 ### Is Cryptex free to use?
 
-Yes, Cryptex is open-source and licensed under the MIT License. You can use it for personal and commercial projects.
+Yes, Cryptex is open-source and licensed under the Apache License 2.0. You can use it for personal and commercial projects.
 
 ## Technical Questions
 
@@ -338,15 +338,15 @@ Cryptex can be deployed on any cloud provider:
 
 ### What license does Cryptex use?
 
-Cryptex is licensed under the MIT License. See the [LICENSE](../LICENSE) file for details.
+Cryptex is licensed under the Apache License 2.0. See the [LICENSE](../LICENSE) file for details.
 
 ### Can I use Cryptex commercially?
 
-Yes, the MIT License allows commercial use.
+Yes, the Apache License 2.0 allows commercial use.
 
 ### Do I need to attribute Cryptex?
 
-The MIT License requires attribution, but it's quite permissive. See the LICENSE file for details.
+Yes. If you redistribute Cryptex or a modified version, the Apache License 2.0 requires you to include a copy of the license, keep the existing copyright notices, and mark files you changed. It also grants you a license to any patents the contributors hold on their contributions. See the LICENSE file for the full terms.
 
 ## Future Plans
 
