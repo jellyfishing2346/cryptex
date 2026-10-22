@@ -6,9 +6,11 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jellyfishing2346/cryptex/internal/api"
+	"github.com/jellyfishing2346/cryptex/internal/demo"
 	"github.com/jellyfishing2346/cryptex/internal/models"
 	"github.com/jellyfishing2346/cryptex/internal/nats"
 	"github.com/jellyfishing2346/cryptex/internal/orderbook"
@@ -20,11 +22,11 @@ import (
 func main() {
 	tradingPair := env("TRADING_PAIR", "BTC-USD")
 	book := orderbook.New(tradingPair)
-	client := redis.NewClient(&redis.Options{
-		Addr:     env("REDIS_ADDR", "localhost:6379"),
-		Password: os.Getenv("REDIS_PASSWORD"),
-		DB:       redisDB(),
-	})
+	redisOpts, err := redisOptions()
+	if err != nil {
+		log.Fatalf("redis config: %v", err)
+	}
+	client := redis.NewClient(redisOpts)
 	defer func() {
 		if err := client.Close(); err != nil {
 			log.Printf("close redis client: %v", err)
@@ -43,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("load order book: %v", err)
 	}
-	if err := restoreOrders(book, orders); err != nil {
+	if err = restoreOrders(book, orders); err != nil {
 		log.Fatalf("restore order book: %v", err)
 	}
 	log.Printf("loaded %d resting orders for %s", len(orders), tradingPair)
@@ -71,7 +73,21 @@ func main() {
 	}
 
 	// Create server with risk management enabled
-	router := api.NewServerWithRisk(book, publisher, riskConfig, store).Router()
+	server := api.NewServerWithRisk(book, publisher, riskConfig, store).WithOptions(api.Options{
+		AllowedOrigins:     splitList(os.Getenv("ALLOWED_ORIGINS")),
+		MaxOrderQuantity:   floatEnv("MAX_ORDER_QUANTITY", 0),
+		RateLimitPerSecond: floatEnv("RATE_LIMIT_PER_SECOND", 0),
+		RateLimitBurst:     intEnv("RATE_LIMIT_BURST", 10),
+		TrustProxy:         os.Getenv("TRUST_PROXY") == "true",
+	})
+	router := server.Router()
+
+	if os.Getenv("DEMO_MODE") == "true" {
+		cfg := demo.DefaultConfig(tradingPair)
+		cfg.StartPrice = floatEnv("DEMO_START_PRICE", cfg.StartPrice)
+		go demo.NewMarketMaker(server, cfg, time.Now().UnixNano()).Run(context.Background())
+		log.Printf("demo mode: market maker quoting %s around %.2f", tradingPair, cfg.StartPrice)
+	}
 
 	addr := ":" + port()
 	log.Printf("starting Cryptex API on %s", addr)
@@ -92,6 +108,58 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// redisOptions reads REDIS_URL (e.g. rediss://user:pass@host:port for TLS,
+// as hosted providers give) or falls back to REDIS_ADDR / REDIS_PASSWORD /
+// REDIS_DB.
+func redisOptions() (*redis.Options, error) {
+	if url := os.Getenv("REDIS_URL"); url != "" {
+		opts, err := redis.ParseURL(url)
+		if err != nil {
+			return nil, fmt.Errorf("invalid REDIS_URL: %w", err)
+		}
+		return opts, nil
+	}
+	return &redis.Options{
+		Addr:     env("REDIS_ADDR", "localhost:6379"),
+		Password: os.Getenv("REDIS_PASSWORD"),
+		DB:       redisDB(),
+	}, nil
+}
+
+func splitList(raw string) []string {
+	var out []string
+	for _, item := range strings.Split(raw, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func floatEnv(key string, fallback float64) float64 {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value < 0 {
+		log.Fatalf("invalid %s: %q", key, raw)
+	}
+	return value
+}
+
+func intEnv(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		log.Fatalf("invalid %s: %q", key, raw)
+	}
+	return value
 }
 
 func redisDB() int {

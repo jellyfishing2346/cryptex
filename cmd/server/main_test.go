@@ -50,3 +50,36 @@ func persistedOrder(tradingPair string) *models.Order {
 		UpdatedAt:   now,
 	}
 }
+
+func TestRedisOptionsFromURL(t *testing.T) {
+	t.Setenv("REDIS_URL", "rediss://default:secret@example.upstash.io:6380/2")
+	opts, err := redisOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.Addr != "example.upstash.io:6380" || opts.Password != "secret" || opts.DB != 2 || opts.TLSConfig == nil {
+		t.Fatalf("unexpected options: addr=%s db=%d tls=%v", opts.Addr, opts.DB, opts.TLSConfig != nil)
+	}
+
+	t.Setenv("REDIS_URL", "")
+	t.Setenv("REDIS_ADDR", "cache:6379")
+	opts, err = redisOptions()
+	if err != nil || opts.Addr != "cache:6379" || opts.TLSConfig != nil {
+		t.Fatalf("fallback to REDIS_ADDR failed: %+v %v", opts, err)
+	}
+
+	t.Setenv("REDIS_URL", "not a url")
+	if _, err := redisOptions(); err == nil {
+		t.Fatal("expected an error for an invalid REDIS_URL")
+	}
+}
+
+func TestSplitList(t *testing.T) {
+	got := splitList(" https://a.app , ,https://b.app ")
+	if len(got) != 2 || got[0] != "https://a.app" || got[1] != "https://b.app" {
+		t.Fatalf("got %v", got)
+	}
+	if splitList("") != nil {
+		t.Fatal("empty input should give no origins")
+	}
+}
