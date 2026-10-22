@@ -12,19 +12,15 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-PROJECT_ID=$(gcloud config get-value project)
+PROJECT_ID="chat-app-6e09e"
 NAMESPACE="cryptex-prod"
 K8S_SA_NAME="cryptex-service-account"
 GCP_SA_NAME="cryptex-sa"
 
 echo -e "${GREEN}=== Cryptex GKE Workload Identity Setup ===${NC}"
 
-# Check if project is set
-if [ -z "$PROJECT_ID" ]; then
-    echo -e "${RED}Error: Project ID not set${NC}"
-    echo "Run: gcloud config set project YOUR_PROJECT_ID"
-    exit 1
-fi
+# Set the project
+gcloud config set project "$PROJECT_ID"
 
 # Create Google Cloud service account
 echo -e "${GREEN}Creating Google Cloud service account...${NC}"

@@ -204,7 +204,7 @@ spec:
       - name: cryptex
         # Update this image reference to your Artifact Registry image
         # Format: REGION-docker.pkg.dev/PROJECT_ID/cryptex/cryptex:latest
-        image: us-central1-docker.pkg.dev/gen-lang-client-0709777468/cryptex/cryptex:latest
+        image: us-central1-docker.pkg.dev/chat-app-6e09e/cryptex/cryptex:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
@@ -339,7 +339,7 @@ metadata:
   name: cryptex-service-account
   namespace: cryptex-prod
   annotations:
-    iam.gke.io/gcp-service-account: cryptex-sa@gen-lang-client-0709777468.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: cryptex-sa@chat-app-6e09e.iam.gserviceaccount.com
 ---
 # Network Policy
 apiVersion: networking.k8s.io/v1

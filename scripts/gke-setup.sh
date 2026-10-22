@@ -46,15 +46,12 @@ gcloud config set project "$PROJECT_ID"
 gcloud config set compute/region "$REGION"
 gcloud config set compute/zone "$ZONE"
 
-# Enable required APIs
+# Enable required APIs (only essential ones)
 echo -e "${GREEN}Enabling required APIs...${NC}"
 gcloud services enable \
     container.googleapis.com \
     cloudbuild.googleapis.com \
-    artifactregistry.googleapis.com \
-    redis.googleapis.com \
-    cloudmonitoring.googleapis.com \
-    logging.googleapis.com
+    artifactregistry.googleapis.com
 
 # Create Artifact Registry repository
 echo -e "${GREEN}Creating Artifact Registry repository...${NC}"
