@@ -1,0 +1,38 @@
+# Render Blueprint: a public demo of Cryptex on the free tier.
+# Deploy with New > Blueprint in the Render dashboard.
+services:
+  - type: web
+    name: cryptex
+    runtime: go
+    plan: free
+    buildCommand: go build -o cryptex-server ./cmd/server
+    startCommand: ./cryptex-server
+    healthCheckPath: /healthz
+    envVars:
+      - key: GIN_MODE
+        value: release
+      - key: DEMO_MODE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: MAX_ORDER_QUANTITY
+        value: "5"
+      - key: RATE_LIMIT_PER_SECOND
+        value: "2"
+      - key: RATE_LIMIT_BURST
+        value: "10"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: cryptex-redis
+          property: connectionString
+      # Add a separate frontend's URL here (comma-separated) when there is one.
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+  - type: keyvalue
+    name: cryptex-redis
+    plan: free
+    # Reachable only from services in this Render account.
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
