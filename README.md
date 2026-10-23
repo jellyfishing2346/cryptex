@@ -6,9 +6,13 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)]()
+[![CI](https://github.com/jellyfishing2346/cryptex/actions/workflows/ci.yml/badge.svg)](https://github.com/jellyfishing2346/cryptex/actions/workflows/ci.yml)
 
 A blazing-fast, production-ready cryptocurrency exchange matching engine built in Go with real-time trade event streaming, persistent storage, and comprehensive risk management.
+
+**[▶ Live demo](https://cryptex-vpu8.onrender.com/)**: trade against a market maker on a live order book. The free instance sleeps when idle, so the first load can take up to a minute.
+
+<a href="https://cryptex-vpu8.onrender.com/"><img src="docs/assets/dashboard.png" alt="Cryptex dashboard: live BTC-USD price chart, order book with depth, recent trades and an order form" width="900"></a>
 
 ---
 
