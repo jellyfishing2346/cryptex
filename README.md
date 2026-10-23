@@ -51,44 +51,36 @@ A blazing-fast, production-ready cryptocurrency exchange matching engine built i
 
 ## 🏗️ Architecture
 
+```mermaid
+flowchart TB
+    browser["Browser dashboard<br/>web/dashboard.html"]
+    bots["Demo market maker and taker<br/>internal/demo, DEMO_MODE"]
+
+    subgraph server["Cryptex server (Go)"]
+        api["REST API, Gin<br/>rate limits, CORS"]
+        ws["WebSocket hub<br/>Gorilla"]
+        orders["Order path<br/>PlaceOrder / CancelOrder"]
+        risk["Risk checks<br/>price, size, position"]
+        engine["Matching engine<br/>price-time priority"]
+        book["Order book<br/>bids and asks"]
+        trades["Trade log<br/>last 200 trades"]
+    end
+
+    redis[("Redis / Valkey<br/>resting orders")]
+    nats[("NATS<br/>trade events, optional")]
+
+    browser -- "orders, book, trades" --> api
+    ws -- "book updates, trades" --> browser
+    api --> orders
+    bots --> orders
+    orders --> risk --> engine --> book
+    orders --> redis
+    orders --> trades
+    orders --> ws
+    orders -.-> nats
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Cryptex Exchange                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│  │   REST API   │    │  WebSocket   │    │   Dashboard  │      │
-│  │   (Gin)      │    │   (Gorilla)  │    │   (HTML/JS)   │      │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘      │
-│         │                   │                   │              │
-│         └───────────────────┼───────────────────┘              │
-│                             │                                  │
-│                    ┌────────▼────────┐                         │
-│                    │  API Router     │                         │
-│                    │  (Order mgmt)   │                         │
-│                    └────────┬────────┘                         │
-│                             │                                  │
-│                    ┌────────▼────────┐                         │
-│                    │ Matching Engine │                         │
-│                    │ (Price-Time)    │                         │
-│                    └────────┬────────┘                         │
-│                             │                                  │
-│         ┌───────────────────┼───────────────────┐              │
-│         │                   │                   │              │
-│  ┌──────▼──────┐    ┌──────▼──────┐    ┌──────▼──────┐       │
-│  │ Order Book  │    │Risk Checker │    │ NATS Pub.   │       │
-│  │ (Bids/Asks) │    │ (Limits)    │    │ (Events)    │       │
-│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘       │
-│         │                   │                   │              │
-│  ┌──────▼──────┐    ┌──────▼──────┐                   │       │
-│  │ Redis Store │    │             │                   │       │
-│  │ (Persistence│    │             │                   │       │
-│  └─────────────┘    │             │                   │       │
-│                     │             │                   │       │
-└─────────────────────┴─────────────┴───────────────────┘       │
-                                                                   │
-└─────────────────────────────────────────────────────────────────┘
-```
+
+Every order, whether from the REST API or the demo bots, goes through one path: risk checks, matching against the book, then persistence to Redis, the in-memory trade log, a WebSocket broadcast to connected dashboards and, if configured, a NATS event. On startup the server reloads resting orders from Redis.
 
 ---
 
