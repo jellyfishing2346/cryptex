@@ -17,7 +17,7 @@ import (
 
 // Engine matches incoming orders against the resting orders in an OrderBook.
 type Engine struct {
-	book   *orderbook.OrderBook
+	book    *orderbook.OrderBook
 	checker *risk.Checker
 }
 
@@ -153,9 +153,11 @@ func (e *Engine) match(incoming *models.Order) []*models.Trade {
 		// Remove fully filled orders from this level
 		remaining := level.Orders[:0]
 		for _, o := range level.Orders {
-			if !o.IsFilled() {
-				remaining = append(remaining, o)
+			if o.IsFilled() {
+				e.book.RemoveFilledLocked(o)
+				continue
 			}
+			remaining = append(remaining, o)
 		}
 		level.Orders = remaining
 	}
