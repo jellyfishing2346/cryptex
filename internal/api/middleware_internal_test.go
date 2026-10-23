@@ -13,8 +13,10 @@ func TestRateLimiterRefillsOverTime(t *testing.T) {
 	limiter := newRateLimiter(1, 2) // 1 per second, burst 2
 	limiter.now = func() time.Time { return now }
 
-	if !limiter.allow("a") || !limiter.allow("a") {
-		t.Fatal("burst of 2 should be allowed")
+	for i := 1; i <= 2; i++ {
+		if !limiter.allow("a") {
+			t.Fatalf("request %d of the burst should be allowed", i)
+		}
 	}
 	if limiter.allow("a") {
 		t.Fatal("third immediate request should be limited")
