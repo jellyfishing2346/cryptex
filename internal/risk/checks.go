@@ -28,8 +28,8 @@ type Config struct {
 // DefaultConfig returns sensible default risk limits.
 func DefaultConfig() Config {
 	return Config{
-		MaxPositionSize: 1000.0, // Default: 1000 units max position
-		MinPrice:        0.01,  // Default: $0.01 minimum price
+		MaxPositionSize: 1000.0,    // Default: 1000 units max position
+		MinPrice:        0.01,      // Default: $0.01 minimum price
 		MaxPrice:        1000000.0, // Default: $1M maximum price
 	}
 }
@@ -98,55 +98,17 @@ func (r *Checker) checkPositionLimit(order *models.Order) error {
 
 // calculateUserPosition calculates the current position size for a user on a given side.
 func (r *Checker) calculateUserPosition(userID uuid.UUID, side models.Side) float64 {
-	r.book.RLock()
-	defer r.book.RUnlock()
-
-	var position float64
-	orders := r.book.RestingOrders()
-
-	for _, o := range orders {
-		if o.UserID == userID && o.Side == side {
-			position += o.Remaining()
-		}
-	}
-
-	return position
+	return r.book.UserRestingQuantity(userID, side)
 }
 
-// checkSelfTradePrevention ensures the order doesn't trade against the user's own orders.
+// checkSelfTradePrevention rejects an order that would trade against one
+// of the same user's resting orders.
 func (r *Checker) checkSelfTradePrevention(order *models.Order) error {
-	r.book.RLock()
-	defer r.book.RUnlock()
-
-	// Get the opposite side of the book
-	var levels []*orderbook.PriceLevel
-	if order.Side == models.SideBuy {
-		levels = r.book.GetAsks()
-	} else {
-		levels = r.book.GetBids()
+	id, found := r.book.CrossingOrderOf(order.UserID, order.Side, order.Price, order.Type == models.OrderTypeMarket)
+	if found {
+		return fmt.Errorf("%w: order would cross with user's own order %s",
+			ErrSelfTradePrevention, id)
 	}
-
-	// Check if the order would cross any of the user's own orders
-	for _, level := range levels {
-		// For limit orders, check if price crosses
-		if order.Type == models.OrderTypeLimit {
-			if order.Side == models.SideBuy && order.Price < level.Price {
-				continue
-			}
-			if order.Side == models.SideSell && order.Price > level.Price {
-				continue
-			}
-		}
-
-		// Check if any orders at this level belong to the same user
-		for _, restingOrder := range level.Orders {
-			if restingOrder.UserID == order.UserID {
-				return fmt.Errorf("%w: order would cross with user's own order %s",
-					ErrSelfTradePrevention, restingOrder.ID)
-			}
-		}
-	}
-
 	return nil
 }
 

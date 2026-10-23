@@ -849,14 +849,16 @@ http DELETE localhost:8080/orders/ORDER_ID
 
 ## Performance Considerations
 
-### Expected Latency
-- Order submission to match: <1ms
-- Order book snapshot: <1ms
-- WebSocket message propagation: <5ms
+Measured on one core of a 2.8 GHz Xeon; full results and how to reproduce them are in [BENCHMARKS.md](BENCHMARKS.md).
+
+### Latency
+- Matching an order (with risk checks): about 1 µs at p50 with 10 price levels per side, 24 µs with 10,000
+- Order book snapshot (top 10): about 1 µs
+- Full `POST /orders` request in process: about 30–40 µs in memory; with local Redis persistence about 160 µs for a small book, growing with the number of resting orders because the whole book is rewritten after each order
 
 ### Throughput
-- Orders per second: 10,000+ (single instance)
-- Concurrent WebSocket connections: 1,000+
+- Matching engine: about 100,000 orders/s with 1,000 price levels per side, 12,000/s with 10,000
+- Concurrent WebSocket connections: not yet measured
 
 ### Optimization Tips
 - Use WebSocket instead of polling for real-time updates

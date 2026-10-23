@@ -48,6 +48,10 @@ type OrderBook struct {
 
 	// index for O(1) order lookup by ID
 	orders map[uuid.UUID]*models.Order
+
+	// resting orders per user, so risk checks look at one user's orders
+	// instead of scanning (and copying) the whole book
+	byUser map[uuid.UUID]map[uuid.UUID]*models.Order
 }
 
 // New creates an empty order book for the given trading pair.
@@ -57,6 +61,7 @@ func New(tradingPair string) *OrderBook {
 		bids:        make([]*PriceLevel, 0),
 		asks:        make([]*PriceLevel, 0),
 		orders:      make(map[uuid.UUID]*models.Order),
+		byUser:      make(map[uuid.UUID]map[uuid.UUID]*models.Order),
 	}
 }
 
@@ -90,6 +95,12 @@ func (ob *OrderBook) addLocked(order *models.Order) error {
 	}
 
 	ob.orders[order.ID] = order
+	mine := ob.byUser[order.UserID]
+	if mine == nil {
+		mine = make(map[uuid.UUID]*models.Order)
+		ob.byUser[order.UserID] = mine
+	}
+	mine[order.ID] = order
 
 	if order.Side == models.SideBuy {
 		ob.addToBids(order)
@@ -127,8 +138,59 @@ func (ob *OrderBook) Cancel(orderID uuid.UUID) (*models.Order, error) {
 		ob.removeFromAsks(order)
 	}
 
-	delete(ob.orders, orderID)
+	ob.forget(order)
 	return order, nil
+}
+
+// RemoveFilledLocked drops a fully filled order from the book's indexes.
+// The matching engine calls it, holding the write lock, after removing the
+// order from its price level; without it filled orders stayed in memory
+// forever.
+func (ob *OrderBook) RemoveFilledLocked(order *models.Order) {
+	ob.forget(order)
+}
+
+func (ob *OrderBook) forget(order *models.Order) {
+	delete(ob.orders, order.ID)
+	if mine := ob.byUser[order.UserID]; mine != nil {
+		delete(mine, order.ID)
+		if len(mine) == 0 {
+			delete(ob.byUser, order.UserID)
+		}
+	}
+}
+
+// UserRestingQuantity is the unfilled quantity a user has resting on one
+// side of the book.
+func (ob *OrderBook) UserRestingQuantity(userID uuid.UUID, side models.Side) float64 {
+	ob.mu.RLock()
+	defer ob.mu.RUnlock()
+	var total float64
+	for _, o := range ob.byUser[userID] {
+		if o.Side == side && o.Status != models.OrderStatusCancelled {
+			total += o.Remaining()
+		}
+	}
+	return total
+}
+
+// CrossingOrderOf returns a resting order of userID that an incoming order
+// (side, price; any price for market orders) would trade against.
+func (ob *OrderBook) CrossingOrderOf(userID uuid.UUID, side models.Side, price float64, market bool) (uuid.UUID, bool) {
+	ob.mu.RLock()
+	defer ob.mu.RUnlock()
+	for _, o := range ob.byUser[userID] {
+		if o.Side == side || o.Remaining() <= 0 || o.Status == models.OrderStatusCancelled {
+			continue
+		}
+		crosses := market ||
+			(side == models.SideBuy && price >= o.Price) ||
+			(side == models.SideSell && price <= o.Price)
+		if crosses {
+			return o.ID, true
+		}
+	}
+	return uuid.Nil, false
 }
 
 // BestBid returns the highest buy price in the book, or 0 if empty.
