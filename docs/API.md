@@ -182,15 +182,18 @@ curl -X POST http://localhost:8080/orders \
 
 ### Cancel Order
 
-Cancel an existing open order.
+Cancel one of your open orders. Only the user who placed an order can cancel it.
 
-**Endpoint:** `DELETE /orders/:id`
+**Endpoint:** `DELETE /orders/:id?user_id=<uuid>`
 
-**URL Parameters:**
+**Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | string | Yes | Order UUID |
+| Parameter | In | Required | Description |
+|-----------|----|----------|-------------|
+| `id` | path | Yes | Order UUID |
+| `user_id` | query | Yes | UUID of the user who placed the order |
+
+Returns `400` if `user_id` is missing, `403` if the order belongs to another user, and `404` if the order is no longer on the book (filled, cancelled or expired).
 
 **Response (Success):**
 ```json
@@ -243,6 +246,32 @@ Cancel an existing open order.
 ```bash
 curl -X DELETE http://localhost:8080/orders/550e8400-e29b-41d4-a716-446655440001
 ```
+
+---
+
+### List Your Orders
+
+Returns a user's resting (open or partially filled) orders, newest first.
+
+**Endpoint:** `GET /orders?user_id=<uuid>`
+
+```json
+{ "orders": [ { "id": "…", "side": "buy", "type": "limit", "price": 64900, "quantity": 0.5, "filled": 0.1, "status": "partial", "user_id": "…", "created_at": "…" } ] }
+```
+
+---
+
+### Recent Trades
+
+Returns the most recent trades, newest first. The last 200 trades are kept in memory.
+
+**Endpoint:** `GET /trades?limit=50` (`limit` 1–200, default 50)
+
+```json
+{ "trades": [ { "id": "…", "trading_pair": "BTC-USD", "price": 65043.77, "quantity": 0.0348, "buy_order_id": "…", "sell_order_id": "…", "executed_at": "…" } ] }
+```
+
+Each new trade is also pushed over the WebSocket as a `trade` event.
 
 ---
 
@@ -638,11 +667,13 @@ Orders are rejected if price is outside configured min/max bounds.
 
 ## Rate Limiting
 
-Currently, Cryptex does not implement rate limiting. In production, you should add rate limiting middleware to prevent abuse.
+Set `RATE_LIMIT_PER_SECOND` (and optionally `RATE_LIMIT_BURST`, default 10) to limit order placement and cancellation per client IP with a token bucket. Over the limit, the API returns `429 Too Many Requests` with `Retry-After: 1`. Reads are not limited. Behind a hosting proxy, set `TRUST_PROXY=true` so the client IP comes from the last `X-Forwarded-For` entry.
+
+`MAX_ORDER_QUANTITY` caps the size of a single order.
 
 ## CORS
 
-CORS is currently open for all origins. In production, configure appropriate CORS restrictions.
+By default the API sends no CORS headers, so browsers only allow same-origin pages such as the built-in dashboard. To let a separate frontend call the API and open the WebSocket, list its origins in `ALLOWED_ORIGINS` (comma-separated).
 
 ## Examples
 

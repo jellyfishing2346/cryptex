@@ -141,7 +141,7 @@ func TestCancelOrder(t *testing.T) {
 	}
 	result := decodeJSON[matching.Result](t, createRec)
 
-	cancelRec := doJSON(t, router, http.MethodDelete, "/orders/"+result.Order.ID.String(), nil)
+	cancelRec := doJSON(t, router, http.MethodDelete, "/orders/"+result.Order.ID.String()+"?user_id="+result.Order.UserID.String(), nil)
 	if cancelRec.Code != http.StatusOK {
 		t.Fatalf("expected cancel status %d, got %d: %s", http.StatusOK, cancelRec.Code, cancelRec.Body.String())
 	}
@@ -167,7 +167,7 @@ func TestPersistsAfterOrderMutations(t *testing.T) {
 	}
 
 	result := decodeJSON[matching.Result](t, createRec)
-	cancelRec := doJSON(t, router, http.MethodDelete, "/orders/"+result.Order.ID.String(), nil)
+	cancelRec := doJSON(t, router, http.MethodDelete, "/orders/"+result.Order.ID.String()+"?user_id="+result.Order.UserID.String(), nil)
 	if cancelRec.Code != http.StatusOK {
 		t.Fatalf("expected cancel status %d, got %d: %s", http.StatusOK, cancelRec.Code, cancelRec.Body.String())
 	}

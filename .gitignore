@@ -17,3 +17,6 @@ vendor/
 
 # OS
 .DS_Store
+
+# Server binary built by render.yaml
+cryptex-server

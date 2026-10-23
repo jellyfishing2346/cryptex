@@ -162,6 +162,19 @@ Open your browser to: **http://localhost:8080**
 | `MAX_POSITION_SIZE` | Max position per user | `1000.0` |
 | `MIN_PRICE` | Minimum allowed price | `0.01` |
 | `MAX_PRICE` | Maximum allowed price | `1000000.0` |
+| `REDIS_URL` | Redis URL, e.g. `rediss://user:pass@host:6380` for TLS; overrides `REDIS_ADDR` | - |
+| `DEMO_MODE` | `true` runs a demo market maker and taker so the book is always live | `false` |
+| `DEMO_START_PRICE` | Price the demo market drifts around | `65000` |
+| `ALLOWED_ORIGINS` | Comma-separated browser origins allowed to call the API (CORS and WebSocket) | - |
+| `MAX_ORDER_QUANTITY` | Largest allowed single order; `0` means no cap | `0` |
+| `RATE_LIMIT_PER_SECOND` | Order placements and cancellations per second per IP; `0` disables | `0` |
+| `RATE_LIMIT_BURST` | Requests allowed in a burst before the rate limit applies | `10` |
+| `TRUST_PROXY` | `true` behind a hosting proxy, to read the client IP from `X-Forwarded-For` | `false` |
+| `GIN_MODE` | Set to `release` in production | `debug` |
+
+### Running a public demo
+
+`render.yaml` deploys the engine to Render's free tier with a Render Key Value instance for persistence, demo mode on and the guardrails above enabled. In demo mode a market maker quotes both sides of the book around a drifting price, a taker trades against it now and then, and visitor orders expire after 30 minutes. The dashboard at `/` shows the live order book, trades and price chart, and lets visitors place and cancel their own orders.
 
 ---
 

@@ -3,6 +3,8 @@ package ws
 import (
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,14 +18,21 @@ const (
 	maxMessageSize = 512
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
-}
-
-// Handler returns a Gin handler that upgrades connections and registers them with the hub.
-func Handler(hub *Hub) gin.HandlerFunc {
+// Handler returns a Gin handler that upgrades connections and registers them
+// with the hub. Browsers may connect from the same origin as the API or from
+// one of allowedOrigins; non-browser clients (no Origin header) are allowed.
+func Handler(hub *Hub, allowedOrigins ...string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" {
+			allowed[o] = struct{}{}
+		}
+	}
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     func(r *http.Request) bool { return originAllowed(r, allowed) },
+	}
 	return func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
@@ -37,6 +46,18 @@ func Handler(hub *Hub) gin.HandlerFunc {
 		go writePump(conn, cl)
 		readPump(conn, hub, cl)
 	}
+}
+
+func originAllowed(r *http.Request, allowed map[string]struct{}) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	if _, ok := allowed[origin]; ok {
+		return true
+	}
+	u, err := url.Parse(origin)
+	return err == nil && strings.EqualFold(u.Host, r.Host)
 }
 
 func readPump(conn *websocket.Conn, hub *Hub, cl *client) {
