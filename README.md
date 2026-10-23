@@ -27,7 +27,7 @@ A blazing-fast, production-ready cryptocurrency exchange matching engine built i
 ### 🎯 Core Trading Engine
 - **Price-Time Priority Matching**: Industry-standard FIFO algorithm for fair order execution
 - **Limit & Market Orders**: Support for both order types with instant execution
-- **Real-time Matching**: Sub-millisecond order processing latency
+- **Fast Matching**: about 1 µs per match at typical depth and under 100 µs at p99 with 10,000 price levels per side ([benchmarks](docs/BENCHMARKS.md))
 - **Thread-Safe Order Book**: Concurrent access with fine-grained locking
 
 ### 🌐 API & Connectivity
@@ -284,8 +284,10 @@ go test ./internal/risk/...
 ### Run Benchmarks
 
 ```bash
-go test -bench=. ./internal/orderbook/
+go test -run='^$' -bench=. ./internal/orderbook/ ./internal/matching/ ./internal/api/
 ```
+
+Results, methodology and the Redis variant are in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ---
 

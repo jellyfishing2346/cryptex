@@ -180,7 +180,7 @@ Cryptex can handle 10,000+ orders per second on a single instance with proper ha
 
 ### What is the latency for order matching?
 
-Order matching latency is typically <1ms for local operations. Total latency including API and persistence is typically <5ms.
+Matching itself takes about 1 µs at typical book depth (24 µs with 10,000 price levels per side). A full `POST /orders` request takes about 30–40 µs in memory and about 160 µs with local Redis persistence for a small book. See [BENCHMARKS.md](BENCHMARKS.md) for the full results.
 
 ### Can Cryptex handle multiple trading pairs?
 
